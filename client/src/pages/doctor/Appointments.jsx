@@ -8,6 +8,7 @@ import Input from "../../components/ui/Input.jsx";
 const tabs = [
   { key: "pending", label: "Pending" },
   { key: "confirmed", label: "Accepted" },
+  { key: "in_progress", label: "In Progress" },
   { key: "cancelled", label: "Rejected" },
   { key: "completed", label: "Completed" },
 ];
@@ -25,8 +26,18 @@ const formatTime = (value) =>
 
 export default function DoctorAppointments() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("pending");
+  // Default to 'confirmed' so dashboard upcoming appointments appear here
+  const [activeTab, setActiveTab] = useState("confirmed");
   const [selected, setSelected] = useState(null);
+  const [prescriptionOpen, setPrescriptionOpen] = useState(false);
+  const [presAppointment, setPresAppointment] = useState(null);
+  const [diag, setDiag] = useState("");
+  const [presNotes, setPresNotes] = useState("");
+  const [nextVisit, setNextVisit] = useState("");
+  const [medicines, setMedicines] = useState([
+    { name: "", dosage: "", duration_days: "" },
+  ]);
+  const [markComplete, setMarkComplete] = useState(false);
   const [patientName, setPatientName] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
   const [programId, setProgramId] = useState("");
@@ -39,8 +50,18 @@ export default function DoctorAppointments() {
       const res = await api.get("/doctor/appointments", {
         params: { status: activeTab },
       });
-      return res.data?.data || [];
+      // API may return paginated { data: [...] } or direct array — handle both
+      return res.data?.data ?? res.data ?? [];
     },
+  });
+
+  const countsQuery = useQuery({
+    queryKey: ["doctor-appointments-counts"],
+    queryFn: async () => {
+      const res = await api.get("/doctor/appointments-counts");
+      return res.data || {};
+    },
+    staleTime: 5000,
   });
 
   const programsQuery = useQuery({
@@ -59,10 +80,14 @@ export default function DoctorAppointments() {
       });
       return res.data;
     },
-    onSuccess: () =>
+    onSuccess: () => {
       queryClient.invalidateQueries({
         predicate: (q) => q.queryKey?.[0] === "doctor-appointments",
-      }),
+      });
+      queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === "doctor-appointments-counts",
+      });
+    },
   });
 
   const createPatient = useMutation({
@@ -78,6 +103,9 @@ export default function DoctorAppointments() {
       queryClient.invalidateQueries({
         predicate: (q) => q.queryKey?.[0] === "doctor-appointments",
       });
+      queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === "doctor-appointments-counts",
+      });
       // close modal and reset form fields
       setSelected(null);
       setPatientName("");
@@ -87,7 +115,16 @@ export default function DoctorAppointments() {
     },
   });
 
-  const handleAccept = (appointment) => {
+  const handleAccept = async (appointment) => {
+    // First mark the appointment as confirmed
+    try {
+      await updateAppointment.mutateAsync({ id: appointment.id, status: 'confirmed' });
+    } catch (e) {
+      console.warn('Accept failed', e);
+      setModalMessage('Failed to accept appointment.');
+      return;
+    }
+    // Then open the patient creation modal
     setSelected(appointment);
     setPatientName(appointment.booked_by_name || "");
     setPatientEmail(appointment.booked_by_email || "");
@@ -150,6 +187,56 @@ export default function DoctorAppointments() {
     [programsQuery.data],
   );
 
+  const openPrescription = (appointment) => {
+    setPresAppointment(appointment);
+    setPrescriptionOpen(true);
+    setDiag("");
+    setPresNotes("");
+    setNextVisit("");
+    setMedicines([{ name: "", dosage: "", duration_days: "" }]);
+  };
+
+  const submitPrescription = async (e) => {
+    e.preventDefault();
+    if (!presAppointment) return;
+    try {
+      const payload = {
+        diagnosis: diag,
+        notes: presNotes,
+        next_visit_date: nextVisit,
+        medicines: medicines.filter((m) => m.name),
+        complete: markComplete,
+      };
+      await api.post(
+        `/doctor/appointments/${presAppointment.id}/prescription`,
+        payload,
+      );
+      queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === "doctor-appointments",
+      });
+      queryClient.invalidateQueries({
+        predicate: (q) => q.queryKey?.[0] === "doctor-appointments-counts",
+      });
+      setPrescriptionOpen(false);
+      alert("Prescription saved.");
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.message || "Unable to save prescription");
+    }
+  };
+
+  const updateMedicine = (idx, key, value) => {
+    const copy = [...medicines];
+    copy[idx][key] = value;
+    setMedicines(copy);
+  };
+
+  const addMedicineRow = () =>
+    setMedicines((prev) => [
+      ...prev,
+      { name: "", dosage: "", duration_days: "" },
+    ]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-[32px] bg-[var(--cream)] border border-[var(--borderSoft)] shadow-lg p-6">
@@ -171,7 +258,10 @@ export default function DoctorAppointments() {
                 : "bg-white border-[var(--borderSoft)]"
             }`}
           >
-            {tab.label}
+            <span className="mr-2">{tab.label}</span>
+            <span className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-full text-xs font-medium bg-white/90 border border-[var(--borderSoft)]">
+              {countsQuery.data ? (countsQuery.data[tab.key] ?? 0) : "–"}
+            </span>
           </button>
         ))}
       </div>
@@ -236,6 +326,46 @@ export default function DoctorAppointments() {
                   onClick={() => handleReject(appointment)}
                 >
                   Reject
+                </Button>
+              </div>
+            )}
+
+            {appointment.status === "confirmed" && (
+              <div className="mt-3 flex gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    updateAppointment.mutate({
+                      id: appointment.id,
+                      status: "in_progress",
+                    })
+                  }
+                >
+                  Start
+                </Button>
+              </div>
+            )}
+
+            {appointment.status === "in_progress" && (
+              <div className="mt-3 flex gap-3">
+                <Button
+                  onClick={() =>
+                    updateAppointment.mutate({
+                      id: appointment.id,
+                      status: "completed",
+                    })
+                  }
+                >
+                  Complete
+                </Button>
+              </div>
+            )}
+
+            {(appointment.status === "in_progress" ||
+              appointment.status === "confirmed") && (
+              <div className="mt-4 flex gap-3">
+                <Button onClick={() => openPrescription(appointment)}>
+                  Add Prescription
                 </Button>
               </div>
             )}
@@ -327,6 +457,96 @@ export default function DoctorAppointments() {
                   {modalMessage}
                 </div>
               )}
+            </form>
+          </div>
+        </div>
+      )}
+      {prescriptionOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="max-w-3xl w-full bg-white rounded-2xl p-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-2xl font-semibold">Add Prescription</h3>
+              <button onClick={() => setPrescriptionOpen(false)}>Close</button>
+            </div>
+
+            <form className="mt-4 space-y-4" onSubmit={submitPrescription}>
+              <Input
+                placeholder="Diagnosis"
+                value={diag}
+                onChange={(e) => setDiag(e.target.value)}
+              />
+              <textarea
+                className="w-full rounded-lg p-3 border"
+                placeholder="Notes"
+                value={presNotes}
+                onChange={(e) => setPresNotes(e.target.value)}
+              />
+              <div>
+                <label className="block text-sm mb-2">Next visit date</label>
+                <input
+                  type="date"
+                  value={nextVisit}
+                  onChange={(e) => setNextVisit(e.target.value)}
+                  className="rounded-lg p-2 border"
+                />
+              </div>
+
+              <div>
+                <h4 className="font-semibold">Medicines</h4>
+                {medicines.map((m, idx) => (
+                  <div key={idx} className="flex gap-2 mt-2">
+                    <input
+                      className="flex-1 rounded-lg p-2 border"
+                      placeholder="Name"
+                      value={m.name}
+                      onChange={(e) =>
+                        updateMedicine(idx, "name", e.target.value)
+                      }
+                    />
+                    <input
+                      className="w-36 rounded-lg p-2 border"
+                      placeholder="Dosage"
+                      value={m.dosage}
+                      onChange={(e) =>
+                        updateMedicine(idx, "dosage", e.target.value)
+                      }
+                    />
+                    <input
+                      className="w-28 rounded-lg p-2 border"
+                      placeholder="Days"
+                      value={m.duration_days}
+                      onChange={(e) =>
+                        updateMedicine(idx, "duration_days", e.target.value)
+                      }
+                    />
+                  </div>
+                ))}
+
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={addMedicineRow}
+                  >
+                    Add Medicine
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-2 flex items-center gap-3">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={markComplete}
+                    onChange={(e) => setMarkComplete(e.target.checked)}
+                  />
+                  <span className="text-sm">Mark appointment as completed</span>
+                </label>
+              </div>
+
+              <div className="mt-4">
+                <Button type="submit">Save Prescription</Button>
+              </div>
             </form>
           </div>
         </div>
