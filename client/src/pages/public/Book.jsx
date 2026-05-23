@@ -62,44 +62,7 @@ export default function Book() {
     });
   };
 
-  // Fallback doctors if DB is empty for demo purposes, else use real DB data
-  const realDoctors = doctorsQuery.data || [];
-  const doctorCards = realDoctors.length
-    ? realDoctors
-    : [
-        {
-          id: 1,
-          name: "Dr. Sarah Lee",
-          specialization: "Orthopedic Rehabilitation",
-          experience: "12 Years",
-          rating: "4.9",
-          bio: "Specializing in sports injuries and post-surgical recovery. Passionate about evidence-based care.",
-        },
-        {
-          id: 2,
-          name: "Dr. James Chen",
-          specialization: "Neurological Physio",
-          experience: "8 Years",
-          rating: "4.8",
-          bio: "Expert in spinal cord injuries and neurological movement disorders. Helping patients regain independence.",
-        },
-        {
-          id: 3,
-          name: "Dr. Emily Carter",
-          specialization: "Geriatric Therapy",
-          experience: "15 Years",
-          rating: "5.0",
-          bio: "Dedicated to helping seniors regain mobility, confidence, and independence through gentle physical therapy.",
-        },
-        {
-          id: 4,
-          name: "Dr. Michael Barnes",
-          specialization: "Chronic Pain Management",
-          experience: "10 Years",
-          rating: "4.7",
-          bio: "Focused on holistic approaches to persistent pain conditions and improving daily function.",
-        },
-      ];
+  const doctorCards = doctorsQuery.data || [];
 
   const slotsByDate = useMemo(() => {
     const list = slotsQuery.data || [];
@@ -171,76 +134,83 @@ export default function Book() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {doctorCards.map((doctor, idx) => {
-                const isSelected = selectedDoctor?.id === doctor.id;
-                return (
-                  <Motion.div
-                    key={doctor.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: idx * 0.1 }}
-                    onClick={() => {
-                      setSelectedDoctor(doctor);
-                      setSelectedDate("");
-                      setSlotAt("");
-                    }}
-                    className={`relative cursor-pointer rounded-[32px] p-8 transition-all duration-500 hover:-translate-y-2 border shadow-lg ${
-                      isSelected
-                        ? "bg-[var(--softLime)] border-[var(--primaryGreen)] shadow-[var(--primaryGreen)]/20"
-                        : "bg-white/90 backdrop-blur-xl border-white hover:border-[var(--borderSoft)] hover:shadow-xl"
-                    }`}
-                  >
-                    {isSelected && (
-                      <Motion.div
-                        layoutId="selected-check"
-                        className="absolute top-6 right-6 text-[var(--darkGreen)]"
-                      >
-                        <CheckCircle2
-                          size={24}
-                          className="fill-[var(--primaryGreen)] text-white"
-                        />
-                      </Motion.div>
-                    )}
+              {doctorCards.length === 0 ? (
+                <div className="md:col-span-2 rounded-[32px] border border-dashed border-[var(--borderSoft)] bg-white/70 px-6 py-10 text-center text-[var(--textSoft)]">
+                  No specialists are available right now. Please check back
+                  after doctors are added or seeded in the database.
+                </div>
+              ) : (
+                doctorCards.map((doctor, idx) => {
+                  const isSelected = selectedDoctor?.id === doctor.id;
+                  return (
+                    <Motion.div
+                      key={doctor.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: idx * 0.1 }}
+                      onClick={() => {
+                        setSelectedDoctor(doctor);
+                        setSelectedDate("");
+                        setSlotAt("");
+                      }}
+                      className={`relative cursor-pointer rounded-[32px] p-8 transition-all duration-500 hover:-translate-y-2 border shadow-lg ${
+                        isSelected
+                          ? "bg-[var(--softLime)] border-[var(--primaryGreen)] shadow-[var(--primaryGreen)]/20"
+                          : "bg-white/90 backdrop-blur-xl border-white hover:border-[var(--borderSoft)] hover:shadow-xl"
+                      }`}
+                    >
+                      {isSelected && (
+                        <Motion.div
+                          layoutId="selected-check"
+                          className="absolute top-6 right-6 text-[var(--darkGreen)]"
+                        >
+                          <CheckCircle2
+                            size={24}
+                            className="fill-[var(--primaryGreen)] text-white"
+                          />
+                        </Motion.div>
+                      )}
 
-                    <div className="flex items-start gap-4 mb-6">
-                      <div className="h-16 w-16 rounded-full bg-[var(--primaryGreen)] flex-shrink-0 flex items-center justify-center text-white text-2xl font-serif drop-shadow-md border-2 border-[var(--softLime)]">
-                        {doctor.name
-                          ? doctor.name.charAt(0).toUpperCase()
-                          : "D"}
-                      </div>
-                      <div className="pr-8">
-                        <h3 className="font-bold text-xl text-[var(--textDark)] line-clamp-1">
-                          {doctor.name}
-                        </h3>
-                        <p className="text-sm font-medium text-[var(--primaryGreen)] mb-2">
-                          {doctor.specialization || "Rehab Specialist"}
-                        </p>
-                        <div className="flex items-center gap-1 text-xs font-semibold text-[var(--textDark)] bg-white/60 backdrop-blur-sm w-fit px-2 py-0.5 rounded-full">
-                          <Star
-                            size={12}
-                            className="fill-yellow-500 text-yellow-500"
-                          />{" "}
-                          {doctor.rating || "5.0"}
+                      <div className="flex items-start gap-4 mb-6">
+                        <div className="h-16 w-16 rounded-full bg-[var(--primaryGreen)] flex-shrink-0 flex items-center justify-center text-white text-2xl font-serif drop-shadow-md border-2 border-[var(--softLime)]">
+                          {doctor.name
+                            ? doctor.name.charAt(0).toUpperCase()
+                            : "D"}
+                        </div>
+                        <div className="pr-8">
+                          <h3 className="font-bold text-xl text-[var(--textDark)] line-clamp-1">
+                            {doctor.name}
+                          </h3>
+                          <p className="text-sm font-medium text-[var(--primaryGreen)] mb-2">
+                            {doctor.specialization || "Rehab Specialist"}
+                          </p>
+                          <div className="flex items-center gap-1 text-xs font-semibold text-[var(--textDark)] bg-white/60 backdrop-blur-sm w-fit px-2 py-0.5 rounded-full">
+                            <Star
+                              size={12}
+                              className="fill-yellow-500 text-yellow-500"
+                            />{" "}
+                            {doctor.rating || "5.0"}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <p className="text-sm text-[var(--textSoft)] leading-relaxed mb-6 line-clamp-3">
-                      {doctor.bio ||
-                        "Focused on restoring mobility with compassionate care and evidence-based treatments."}
-                    </p>
+                      <p className="text-sm text-[var(--textSoft)] leading-relaxed mb-6 line-clamp-3">
+                        {doctor.bio ||
+                          "Focused on restoring mobility with compassionate care and evidence-based treatments."}
+                      </p>
 
-                    <div className="pt-5 border-t border-[var(--borderSoft)] flex items-center justify-between">
-                      <div className="text-xs text-[var(--textSoft)]">
-                        <span className="block font-semibold text-[var(--textDark)]">
-                          {doctor.experience || "10+ Years"}
-                        </span>
-                        Experience
+                      <div className="pt-5 border-t border-[var(--borderSoft)] flex items-center justify-between">
+                        <div className="text-xs text-[var(--textSoft)]">
+                          <span className="block font-semibold text-[var(--textDark)]">
+                            {doctor.experience || "10+ Years"}
+                          </span>
+                          Experience
+                        </div>
                       </div>
-                    </div>
-                  </Motion.div>
-                );
-              })}
+                    </Motion.div>
+                  );
+                })
+              )}
             </div>
           </div>
 

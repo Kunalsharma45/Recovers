@@ -47,31 +47,24 @@ class AppointmentController extends Controller
                 abort(response()->json(['message' => 'This email is already used by another account.'], 422));
             }
 
+            // Step 1: Create user if not exists (generates login credentials)
             if (! $user) {
                 $plainPassword = Str::random(10);
 
                 $user = User::create([
-                    'name'     => $request->booked_by_name,
-                    'email'    => $request->booked_by_email,
-                    'password' => $plainPassword,
-                    'role'     => 'patient',
+                    'name'       => $request->booked_by_name,
+                    'email'      => $request->booked_by_email,
+                    'password'   => $plainPassword,
+                    'role'       => 'patient',
+                    'is_active'  => true, // Explicitly enable for immediate login
                 ]);
             }
 
-            $patient = $user->patient;
-
-            if (! $patient) {
-                $patient = Patient::create([
-                    'user_id'     => $user->id,
-                    'doctor_id'   => $request->doctor_id,
-                    'program_id'  => null,
-                    'enrolled_at' => now(),
-                ]);
-            }
-
+            // Step 2: Create appointment WITHOUT patient linkage yet
+            // Patient record will be created on first login, then auto-attached
             $appointment = Appointment::create([
                 'doctor_id'           => $request->doctor_id,
-                'patient_id'          => $patient->id,
+                'patient_id'          => null, // Will be auto-attached after patient logs in
                 'booked_by_name'      => $request->booked_by_name,
                 'booked_by_email'     => $request->booked_by_email,
                 'slot_at'             => $request->slot_at,
@@ -80,6 +73,7 @@ class AppointmentController extends Controller
                 'status'              => 'pending',
             ]);
 
+            // Step 3: Return booking data for email + response
             return [
                 'user' => $user,
                 'appointment' => $appointment,

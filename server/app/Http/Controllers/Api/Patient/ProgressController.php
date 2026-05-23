@@ -22,27 +22,26 @@ class ProgressController extends Controller
 
         $allMilestones = $patient->program?->milestones->sortBy('due_day')->values();
         $milestoneIds = $allMilestones->pluck('id');
-        
+
         $completedMap = $patient->progress()
             ->whereIn('milestone_id', $milestoneIds)
             ->get()
             ->keyBy('milestone_id');
-        
+
         $startDate = \Carbon\Carbon::parse($patient->enrolled_at ?? $patient->created_at)->startOfDay();
         $today = \Carbon\Carbon::today();
-        
+
         // Use absolute diff + 1 for day index
         $currentDay = (int) $today->diffInDays($startDate) + 1;
-        
+
         // If somehow today is before start date, current day is 1
         if ($today->lt($startDate)) $currentDay = 1;
-        
+
         // Check if any milestone from CURRENT program was completed today
-        $completedToday = $patient->progress()
-            ->whereIn('milestone_id', $milestoneIds)
-            ->whereDate('completed_at', $today)
-            ->where('status', 'Completed')
-            ->exists();
+        $completedToday = $completedMap->contains(function ($p) use ($today) {
+            if (!isset($p->completed_at)) return false;
+            return \Carbon\Carbon::parse($p->completed_at)->isSameDay($today) && ($p->status === 'Completed');
+        });
 
         $milestones = [];
         $previousCompleted = true; // First one is unlocked if previous is true
@@ -50,13 +49,13 @@ class ProgressController extends Controller
         foreach ($allMilestones as $index => $ms) {
             $progress = $completedMap->get($ms->id);
             $scheduledDate = $startDate->copy()->addDays($ms->due_day - 1)->startOfDay();
-            
+
             $isCompleted = ($progress?->status === 'Completed');
-            
+
             // Unlocked if previous is completed AND (it's due today or in the past)
             // Day 1 is always unlocked for 'time' if it's the start date
             $isLocked = !$previousCompleted || ($ms->due_day > $currentDay);
-            
+
             // Available if not locked, not completed, and nothing else completed today
             $isAvailableToday = !$isLocked && !$isCompleted && !$completedToday;
 
@@ -137,7 +136,7 @@ class ProgressController extends Controller
             $prevProgress = PatientProgress::where('patient_id', $patient->id)
                 ->where('milestone_id', $previousMilestone->id)
                 ->first();
-            
+
             if (!$prevProgress || $prevProgress->status !== 'Completed') {
                 return response()->json(['message' => 'Please complete the previous milestone first.'], 403);
             }
@@ -146,7 +145,7 @@ class ProgressController extends Controller
         // 4. Check time logic
         $startDate = ($patient->enrolled_at ?? $patient->created_at)->startOfDay();
         $scheduledDate = $startDate->copy()->addDays($milestone->due_day - 1)->startOfDay();
-        
+
         if ($scheduledDate->isFuture()) {
             return response()->json(['message' => 'This milestone is scheduled for ' . $scheduledDate->toDateString()], 403);
         }

@@ -31,6 +31,7 @@ class DoctorSeeder extends Seeder
                 [
                     'name'      => $data['name'],
                     'password'  => 'password',
+                    'email_verified_at' => now(),
                     'role'      => 'doctor',
                     'is_active' => true,
                 ]
